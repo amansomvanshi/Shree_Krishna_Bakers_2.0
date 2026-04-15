@@ -24,7 +24,6 @@ jobs:
           timeout: 60s
           command_timeout: 20m
           script: |
-            cd ~
+            cd Shree_Krishna_Bakers_2.0
             ls 
-            ll 
             ./.scripts/deploy.sh
