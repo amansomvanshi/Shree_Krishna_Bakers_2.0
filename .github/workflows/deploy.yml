@@ -24,4 +24,5 @@ jobs:
           timeout: 60s
           command_timeout: 20m
           script: |
+            cd ~
             ./.scripts/deploy.sh
