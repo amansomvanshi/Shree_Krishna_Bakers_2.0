@@ -6,14 +6,14 @@ echo "Deployment started ... ⏳⏳"
 cd ~/
 
 #copy the .env files
-cp frontend.env ~/frontend/.env
-cp backend.env ~/backend/.env
+cp ~/frontend.env ~/Shree_Krishna_Bakers_2.0/frontend/.env
+cp ~/backend.env ~/Shree_Krishna_Bakers_2.0/backend/.env
 
 # Pull the latest version of the app
 git pull origin main
 echo "Pulled successfully 👌"
 
-cd ~
+cd ~/Shree_Krishna_Bakers_2.0
 
 echo "going for frontend"
 cd ./frontend
