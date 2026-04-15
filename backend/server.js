@@ -14,7 +14,15 @@ const app = express();
 // ============================================
 // ENVIRONMENT VARIABLE VALIDATION
 // ============================================
-const requiredEnvVars = ["MONGO_URI", "JWT_SECRET", "EMAIL_USER", "EMAIL_PASS", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "FRONTEND_URL"];
+const requiredEnvVars = [
+  "MONGO_URI",
+  "JWT_SECRET",
+  "EMAIL_USER",
+  "EMAIL_PASS",
+  "RAZORPAY_KEY_ID",
+  "RAZORPAY_KEY_SECRET",
+  "FRONTEND_URL",
+];
 
 const missingVars = requiredEnvVars.filter((varName) => !process.env[varName]);
 
@@ -72,7 +80,7 @@ app.use((req, res, next) => {
     res.setHeader(
       "Access-Control-Allow-Headers",
       req.headers["access-control-request-headers"] ||
-      "Content-Type, x-auth-token",
+        "Content-Type, x-auth-token",
     );
   }
 
@@ -186,7 +194,7 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB Connected Successfully");
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📝 Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`🌐 CORS Configuration:`);
@@ -197,9 +205,10 @@ mongoose
         console.log(`   - Development mode: Allowing all localhost ports`);
       } else {
         console.log(
-          `   - Allowed origins: ${allowedOrigins.length > 0
-            ? allowedOrigins.join(", ")
-            : "None (configure FRONTEND_URL)"
+          `   - Allowed origins: ${
+            allowedOrigins.length > 0
+              ? allowedOrigins.join(", ")
+              : "None (configure FRONTEND_URL)"
           }`,
         );
       }
