@@ -27,5 +27,4 @@ jobs:
             cd Shree_Krishna_Bakers_2.0
             ls 
             node -v
-            npm -v
             ./.scripts/deploy.sh
