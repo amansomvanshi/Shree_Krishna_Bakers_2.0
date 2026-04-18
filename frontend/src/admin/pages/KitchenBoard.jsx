@@ -24,7 +24,9 @@ const KitchenBoard = () => {
       // This ensures it rings even if the admin just navigated to this page
       let rangOrders;
       try {
-        rangOrders = new Set(JSON.parse(localStorage.getItem("rangOrders") || "[]"));
+        rangOrders = new Set(
+          JSON.parse(localStorage.getItem("rangOrders") || "[]"),
+        );
       } catch (e) {
         rangOrders = new Set();
       }
@@ -40,7 +42,10 @@ const KitchenBoard = () => {
       if (hasNew) {
         playNewOrderSound();
         // Keep only the last 200 orders so localStorage doesn't get too big
-        localStorage.setItem("rangOrders", JSON.stringify([...rangOrders].slice(-200)));
+        localStorage.setItem(
+          "rangOrders",
+          JSON.stringify([...rangOrders].slice(-200)),
+        );
       }
 
       setOrders(activeOrders);
@@ -124,11 +129,20 @@ const KitchenBoard = () => {
     }
 
     const isDineIn = !!order.tableNo;
-    const orderType = isDineIn ? `Dine-In (Table ${order.tableNo})` : `Delivery/Online`;
-    const customerName = order.userId?.name || order.customerDetails?.name || "Customer";
+    const orderType = isDineIn
+      ? `Dine-In (Table ${order.tableNo})`
+      : `Delivery/Online`;
+    const customerName =
+      order.userId?.name || order.customerDetails?.name || "Customer";
+    const customerPhone =
+      order.userId?.phone || order.customerDetails?.phone || "";
     const itemsSubtotal =
       order.itemsSubtotal ||
-      order.items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+      order.items.reduce(
+        (sum, item) =>
+          sum + Number(item.price || 0) * Number(item.quantity || 0),
+        0,
+      );
     const additionalCharges = order.additionalCharges || [];
     const discount = order.discount;
 
@@ -139,7 +153,7 @@ const KitchenBoard = () => {
         <span>${item.quantity}x ${item.name}</span>
         <span>₹${Number(item.price || 0) * Number(item.quantity || 0)}</span>
       </div>
-    `
+    `,
       )
       .join("");
 
@@ -165,6 +179,7 @@ const KitchenBoard = () => {
             .divider { border-bottom: 1px dashed #000; margin: 12px 0; }
             .row { display: flex; justify-content: space-between; gap: 12px; }
             .total { font-weight: bold; font-size: 20px; text-align: right; margin-top: 10px; }
+            .customer-phone { font-weight: 700; font-size: 17px; }
             @media print { body { width: 100%; padding: 0; margin: 0; } }
           </style>
         </head>
@@ -175,9 +190,10 @@ const KitchenBoard = () => {
           <p><strong>Order ID:</strong> #${order._id.slice(-6).toUpperCase()}</p>
           <p><strong>Type:</strong> ${orderType}</p>
           <p><strong>Customer:</strong> ${customerName}</p>
+          ${customerPhone ? `<p class="customer-phone"><strong>Phone:</strong> ${customerPhone}</p>` : ""}
           <p><strong>Date:</strong> ${new Date(order.createdAt || Date.now()).toLocaleString()}</p>
-          ${order.address && !order.tableNo ? `<p><strong>Address:</strong> ${order.address}</p>` : ''}
-          ${order.location ? `<p><strong>Map Link:</strong> https://www.google.com/maps/search/?api=1&query=${order.location.lat},${order.location.lng}</p>` : ''}
+          ${order.address && !order.tableNo ? `<p><strong>Address:</strong> ${order.address}</p>` : ""}
+          ${order.location ? `<p><strong>Map Link:</strong> https://www.google.com/maps/search/?api=1&query=${order.location.lat},${order.location.lng}</p>` : ""}
           <div class="divider"></div>
           ${itemsHtml}
           <div class="divider"></div>
@@ -226,6 +242,8 @@ const KitchenBoard = () => {
   // COMPONENT: CARD FOR DELIVERY FLOW
   const DeliveryCard = ({ order, nextStatus, buttonText, colorType }) => {
     const styles = STATUS_STYLES[colorType];
+    const customerPhone =
+      order.userId?.phone || order.customerDetails?.phone || "";
     return (
       <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm mb-4 transition-all hover:shadow-md">
         <div className="flex justify-between items-start mb-3">
@@ -234,8 +252,15 @@ const KitchenBoard = () => {
               #{order._id.slice(-6).toUpperCase()}
             </span>
             <h4 className="font-bold text-gray-800">
-              {order.userId?.name || order.customerDetails?.name || "Online Customer"}
+              {order.userId?.name ||
+                order.customerDetails?.name ||
+                "Online Customer"}
             </h4>
+            {customerPhone && (
+              <p className="text-sm font-bold text-gray-700 mt-1">
+                {customerPhone}
+              </p>
+            )}
           </div>
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-2 mb-1">
@@ -253,16 +278,17 @@ const KitchenBoard = () => {
               </span>
             </div>
             <span
-              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${order.paymentStatus === "Paid"
-                ? "bg-green-100 text-green-600"
-                : "bg-gray-100 text-gray-500"
-                }`}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                order.paymentStatus === "Paid"
+                  ? "bg-green-100 text-green-600"
+                  : "bg-gray-100 text-gray-500"
+              }`}
             >
               {order.paymentStatus || "Pending"}
             </span>
           </div>
         </div>
-        
+
         {/* Display Address & Live Location Link on Card */}
         {order.address && !order.tableNo && (
           <p className="text-xs text-gray-500 mb-2 px-1 line-clamp-2">
@@ -305,73 +331,85 @@ const KitchenBoard = () => {
   };
 
   // COMPONENT: CARD FOR DINE-IN (Simple "Done" Button)
-  const DineInCard = ({ order }) => (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-full">
-      <div>
-        <div className="flex justify-between items-start mb-4">
-          <div className="bg-orange-100 text-orange-700 px-3 py-1 rounded-lg font-bold text-lg">
-            Table {order.tableNo}
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handlePrint(order)}
-                className="text-gray-400 hover:text-gray-800 transition-colors bg-gray-50 p-1.5 rounded-md shadow-sm"
-                title="Print Receipt"
+  const DineInCard = ({ order }) => {
+    const customerPhone =
+      order.userId?.phone || order.customerDetails?.phone || "";
+
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-full">
+        <div>
+          <div className="flex justify-between items-start mb-4">
+            <div className="bg-orange-100 text-orange-700 px-3 py-1 rounded-lg font-bold text-lg">
+              Table {order.tableNo}
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePrint(order)}
+                  className="text-gray-400 hover:text-gray-800 transition-colors bg-gray-50 p-1.5 rounded-md shadow-sm"
+                  title="Print Receipt"
+                >
+                  🖨️
+                </button>
+                <span className="text-xs font-mono text-gray-400">
+                  #{order._id.slice(-6).toUpperCase()}
+                </span>
+              </div>
+              <span
+                className={`px-2 py-1 rounded text-[10px] font-bold uppercase mt-1 ${order.status === "Order Placed" ? "bg-blue-100 text-blue-600" : "bg-orange-100 text-orange-600"}`}
               >
-                🖨️
-              </button>
-              <span className="text-xs font-mono text-gray-400">
-                #{order._id.slice(-6).toUpperCase()}
+                {order.status}
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                  order.paymentStatus === "Paid"
+                    ? "bg-green-100 text-green-600"
+                    : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {order.paymentStatus || "Pending"}
               </span>
             </div>
-            <span
-              className={`px-2 py-1 rounded text-[10px] font-bold uppercase mt-1 ${order.status === 'Order Placed' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}
-            >
-              {order.status}
-            </span>
-            <span
-              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${order.paymentStatus === "Paid"
-                ? "bg-green-100 text-green-600"
-                : "bg-gray-100 text-gray-500"
-                }`}
-            >
-              {order.paymentStatus || "Pending"}
-            </span>
+          </div>
+
+          {customerPhone && (
+            <p className="text-sm font-bold text-gray-700 mb-3">
+              Customer No: {customerPhone}
+            </p>
+          )}
+
+          <div className="space-y-2 mb-6">
+            {order.items.map((item, idx) => (
+              <div
+                key={idx}
+                className="flex justify-between items-center text-gray-700 border-b border-dashed border-gray-100 pb-1 last:border-0"
+              >
+                <span className="font-medium text-lg">
+                  {item.quantity}x {item.name}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="space-y-2 mb-6">
-          {order.items.map((item, idx) => (
-            <div
-              key={idx}
-              className="flex justify-between items-center text-gray-700 border-b border-dashed border-gray-100 pb-1 last:border-0"
-            >
-              <span className="font-medium text-lg">
-                {item.quantity}x {item.name}
-              </span>
-            </div>
-          ))}
-        </div>
+        {order.status === "Order Placed" ? (
+          <button
+            onClick={() => handleStatusUpdate(order._id, "Preparing")}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-100 transition-transform active:scale-95 flex items-center justify-center gap-2"
+          >
+            <span>🔔</span> Accept Order
+          </button>
+        ) : (
+          <button
+            onClick={() => handleStatusUpdate(order._id, "Delivered")}
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-green-100 transition-transform active:scale-95 flex items-center justify-center gap-2"
+          >
+            <span>✅</span> Mark Served
+          </button>
+        )}
       </div>
-
-      {order.status === "Order Placed" ? (
-        <button
-          onClick={() => handleStatusUpdate(order._id, "Preparing")}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-100 transition-transform active:scale-95 flex items-center justify-center gap-2"
-        >
-          <span>🔔</span> Accept Order
-        </button>
-      ) : (
-        <button
-          onClick={() => handleStatusUpdate(order._id, "Delivered")}
-          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-green-100 transition-transform active:scale-95 flex items-center justify-center gap-2"
-        >
-          <span>✅</span> Mark Served
-        </button>
-      )}
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="h-full flex flex-col space-y-8 overflow-y-auto pb-20">
