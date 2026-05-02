@@ -8,11 +8,13 @@ import { Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import api from "../utils/api";
+import useStoreAvailability from "../hooks/useStoreAvailability";
 
 const HomePage = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [todaysSpecial, setTodaysSpecial] = useState("Loading offers...");
+  const { storeAvailability } = useStoreAvailability({ autoRefreshMs: 60000 });
 
   useEffect(() => {
     const fetchSpecial = async () => {
@@ -68,13 +70,29 @@ const HomePage = () => {
                 <h2 className="text-white mt-1 text-2xl font-bold">
                   {todaysSpecial}
                 </h2>
+
+                <div
+                  className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+                    storeAvailability.isCurrentlyOpen
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                      : "border-amber-200 bg-amber-50 text-amber-900"
+                  }`}
+                >
+                  <p className="font-bold">
+                    {storeAvailability.isCurrentlyOpen
+                      ? `We are available till ${storeAvailability.closesAtLabel}`
+                      : storeAvailability.closedMessage}
+                  </p>
+                  <p className="mt-1 text-xs opacity-80">
+                    Online orders are served between{" "}
+                    {storeAvailability.opensAtLabel} and{" "}
+                    {storeAvailability.closesAtLabel}.
+                  </p>
+                </div>
               </div>
 
               {/* SEARCH BAR */}
-              <form
-                onSubmit={handleSearch}
-                className="mt-8 relative group"
-              >
+              <form onSubmit={handleSearch} className="mt-8 relative group">
                 <Search
                   className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 group-focus-within:text-white transition-colors"
                   size={20}
