@@ -6,6 +6,7 @@ import api from "../utils/api";
 import OrderSuccess from "../components/OrderSuccess";
 import LegalFooter from "../components/LegalFooter";
 import { User, Mail, Phone, MapPin } from "lucide-react";
+import useStoreAvailability from "../hooks/useStoreAvailability";
 
 const CartPage = () => {
   const { cartItems, clearCart, addToCart, removeFromCart } = useCart();
@@ -17,6 +18,9 @@ const CartPage = () => {
   const [offers, setOffers] = useState([]);
   const [showOffers, setShowOffers] = useState(false);
   const [appliedOfferCode, setAppliedOfferCode] = useState("");
+  const { storeAvailability, setStoreAvailability } = useStoreAvailability({
+    autoRefreshMs: 60000,
+  });
 
   // 🟢 NEW: Live Location States
   const [liveLocation, setLiveLocation] = useState(null);
@@ -88,15 +92,22 @@ const CartPage = () => {
   // IMPORTANT: This assumes getCartTotal() in your context is also updated.
   // We recalculate here to be safe and for display.
   const subtotal = cartItems.reduce(
-    (total, item) => total + (item.offerPrice || item.price) * item.quantity, 0
+    (total, item) => total + (item.offerPrice || item.price) * item.quantity,
+    0,
   );
   // Delivery fee now comes from the backend based on live distance.
-  const delivery = userRole === "admin" ? 0 : subtotal > 0 ? pricingMeta.deliveryCharge : 0;
-  const additionalCharges = subtotal > 0 ? pricingMeta.additionalCharges || [] : [];
-  const additionalChargesTotal = subtotal > 0 ? pricingMeta.additionalChargesTotal || 0 : 0;
+  const delivery =
+    userRole === "admin" ? 0 : subtotal > 0 ? pricingMeta.deliveryCharge : 0;
+  const additionalCharges =
+    subtotal > 0 ? pricingMeta.additionalCharges || [] : [];
+  const additionalChargesTotal =
+    subtotal > 0 ? pricingMeta.additionalChargesTotal || 0 : 0;
   const discount = subtotal > 0 ? pricingMeta.discount : null;
   const discountAmount = subtotal > 0 ? pricingMeta.discountAmount || 0 : 0;
-  const total = subtotal > 0 ? pricingMeta.totalAmount || subtotal + delivery + additionalChargesTotal : 0;
+  const total =
+    subtotal > 0
+      ? pricingMeta.totalAmount || subtotal + delivery + additionalChargesTotal
+      : 0;
 
   useEffect(() => {
     const fetchOffers = async () => {
@@ -127,10 +138,12 @@ const CartPage = () => {
         },
         (error) => {
           console.error(error);
-          setLocationError("Location access nahi mila. Please browser me location permission allow karein.");
+          setLocationError(
+            "Location access nahi mila. Please browser me location permission allow karein.",
+          );
           setLocationLoading(false);
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 10000 },
       );
     } else {
       setLocationError("Aapke browser me geolocation support nahi hai.");
@@ -139,10 +152,23 @@ const CartPage = () => {
   }, []);
 
   useEffect(() => {
-    if (roleReady && userRole !== "admin" && cartItems.length > 0 && !liveLocation && !locationLoading) {
+    if (
+      roleReady &&
+      userRole !== "admin" &&
+      cartItems.length > 0 &&
+      !liveLocation &&
+      !locationLoading
+    ) {
       handleGetLocation();
     }
-  }, [cartItems.length, handleGetLocation, liveLocation, locationLoading, roleReady, userRole]);
+  }, [
+    cartItems.length,
+    handleGetLocation,
+    liveLocation,
+    locationLoading,
+    roleReady,
+    userRole,
+  ]);
 
   useEffect(() => {
     const fetchPricingSummary = async () => {
@@ -189,6 +215,12 @@ const CartPage = () => {
           deliveryCharge: data.deliveryCharge,
           pricingLabel: data.pricingLabel,
         });
+        if (data.storeAvailability) {
+          setStoreAvailability((current) => ({
+            ...current,
+            ...data.storeAvailability,
+          }));
+        }
       } catch (error) {
         console.error("Delivery charge fetch failed:", error);
         setDeliveryMeta({
@@ -202,7 +234,15 @@ const CartPage = () => {
     };
 
     fetchPricingSummary();
-  }, [appliedOfferCode, buildOrderItems, cartItems.length, liveLocation, roleReady, userRole]);
+  }, [
+    appliedOfferCode,
+    buildOrderItems,
+    cartItems.length,
+    liveLocation,
+    roleReady,
+    setStoreAvailability,
+    userRole,
+  ]);
 
   const validateOrderFields = () => {
     const errors = {};
@@ -233,7 +273,8 @@ const CartPage = () => {
       }
 
       if (!liveLocation) {
-        errors.location = "Live location required hai. Please location allow karein.";
+        errors.location =
+          "Live location required hai. Please location allow karein.";
       }
     }
 
@@ -244,6 +285,14 @@ const CartPage = () => {
   // --- HANDLE ORDER LOGIC ---
   const handlePlaceOrder = async () => {
     setOrderError("");
+
+    if (userRole !== "admin" && !storeAvailability.isCurrentlyOpen) {
+      setOrderError(
+        storeAvailability.closedMessage || "We are not serviceable currently.",
+      );
+      return;
+    }
+
     if (!validateOrderFields()) {
       return;
     }
@@ -256,12 +305,21 @@ const CartPage = () => {
         items: buildOrderItems(),
         totalAmount: total,
         offerCode: appliedOfferCode,
-        address: userRole === "admin" ? (customerInfo.address || "Dine-in") : customerInfo.address,
+        address:
+          userRole === "admin"
+            ? customerInfo.address || "Dine-in"
+            : customerInfo.address,
         tableNo: userRole === "admin" ? tableNo : "",
         customerDetails: {
           name: customerInfo.name,
-          email: userRole === "admin" ? (customerInfo.email || "admin@order.com") : customerInfo.email,
-          phone: userRole === "admin" ? (customerInfo.phone || "0000000000") : customerInfo.phone,
+          email:
+            userRole === "admin"
+              ? customerInfo.email || "admin@order.com"
+              : customerInfo.email,
+          phone:
+            userRole === "admin"
+              ? customerInfo.phone || "0000000000"
+              : customerInfo.phone,
         },
         location: liveLocation,
       };
@@ -283,14 +341,19 @@ const CartPage = () => {
       });
 
       // 3. Open Razorpay Checkout Modal
-      const razorpayKey = rzpOrder.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID;
+      const razorpayKey =
+        rzpOrder.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID;
 
       if (!window.Razorpay) {
-        throw new Error("Razorpay checkout script load nahi hua. Please internet connection check karein.");
+        throw new Error(
+          "Razorpay checkout script load nahi hua. Please internet connection check karein.",
+        );
       }
 
       if (!razorpayKey) {
-        throw new Error("Razorpay key configure nahi hai. Backend .env me RAZORPAY_KEY_ID set karein.");
+        throw new Error(
+          "Razorpay key configure nahi hai. Backend .env me RAZORPAY_KEY_ID set karein.",
+        );
       }
 
       const options = {
@@ -310,7 +373,10 @@ const CartPage = () => {
               orderData: orderData, // Pass the original order data to save in DB
             };
 
-            const verifyRes = await api.post("/user/verify-payment", verificationData);
+            const verifyRes = await api.post(
+              "/user/verify-payment",
+              verificationData,
+            );
 
             if (verifyRes.data.orderId) {
               setLoading(false);
@@ -319,7 +385,9 @@ const CartPage = () => {
             }
           } catch (err) {
             console.error("Verification Failed:", err);
-            setOrderError("Payment verification failed. Please support se contact karein.");
+            setOrderError(
+              "Payment verification failed. Please support se contact karein.",
+            );
             setLoading(false);
           }
         },
@@ -344,14 +412,26 @@ const CartPage = () => {
       const rzp = new window.Razorpay(options);
       rzp.on("payment.failed", (response) => {
         console.error("Razorpay payment failed:", response.error);
-        setOrderError(response.error?.description || "Payment failed. Please dobara try karein.");
+        setOrderError(
+          response.error?.description ||
+            "Payment failed. Please dobara try karein.",
+        );
         setLoading(false);
       });
       rzp.open();
-
     } catch (error) {
       console.error("Order Failed:", error);
-      setOrderError(error.response?.data?.error || error.message || "Failed to initiate payment. Try again.");
+      if (error.response?.data?.storeAvailability) {
+        setStoreAvailability((current) => ({
+          ...current,
+          ...error.response.data.storeAvailability,
+        }));
+      }
+      setOrderError(
+        error.response?.data?.error ||
+          error.message ||
+          "Failed to initiate payment. Try again.",
+      );
       setLoading(false);
     }
   };
@@ -395,7 +475,9 @@ const CartPage = () => {
                 className="flex flex-col p-4 bg-white border border-gray-100 rounded-2xl shadow-sm"
               >
                 <div className="flex justify-between items-start mb-3">
-                  <span className="font-bold text-gray-800 text-lg">{item.name}</span>
+                  <span className="font-bold text-gray-800 text-lg">
+                    {item.name}
+                  </span>
                   <span className="font-bold text-gray-900 text-lg tabular-nums">
                     ₹{(item.offerPrice || item.price) * item.quantity}
                   </span>
@@ -404,8 +486,12 @@ const CartPage = () => {
                 <div className="flex justify-between items-center mt-auto">
                   {item.offerPrice && item.offerPrice < item.price ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-orange-600 font-bold">₹{item.offerPrice} each</span>
-                      <span className="text-xs text-gray-400 line-through">₹{item.price}</span>
+                      <span className="text-sm text-orange-600 font-bold">
+                        ₹{item.offerPrice} each
+                      </span>
+                      <span className="text-xs text-gray-400 line-through">
+                        ₹{item.price}
+                      </span>
                     </div>
                   ) : (
                     <span className="text-sm text-gray-500 font-medium">
@@ -443,7 +529,10 @@ const CartPage = () => {
 
             <div className="grid grid-cols-1 gap-3">
               <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <User
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                  size={18}
+                />
                 <input
                   type="text"
                   placeholder="Customer Name"
@@ -454,62 +543,109 @@ const CartPage = () => {
                   }}
                   className={`w-full pl-12 pr-4 py-3 bg-gray-50 border rounded-xl focus:outline-none focus:border-orange-500 focus:bg-white transition-all text-sm ${fieldErrors.name ? "border-red-300" : "border-gray-100"}`}
                 />
-                {fieldErrors.name && <p className="mt-1 text-xs font-semibold text-red-500">{fieldErrors.name}</p>}
+                {fieldErrors.name && (
+                  <p className="mt-1 text-xs font-semibold text-red-500">
+                    {fieldErrors.name}
+                  </p>
+                )}
               </div>
 
               {userRole !== "admin" && (
                 <>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <Mail
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                      size={18}
+                    />
                     <input
                       type="email"
                       placeholder="Email Address"
                       value={customerInfo.email}
                       onChange={(e) => {
-                        setCustomerInfo({ ...customerInfo, email: e.target.value });
-                        setFieldErrors((current) => ({ ...current, email: "" }));
+                        setCustomerInfo({
+                          ...customerInfo,
+                          email: e.target.value,
+                        });
+                        setFieldErrors((current) => ({
+                          ...current,
+                          email: "",
+                        }));
                       }}
                       className={`w-full pl-12 pr-4 py-3 bg-gray-50 border rounded-xl focus:outline-none focus:border-orange-500 focus:bg-white transition-all text-sm ${fieldErrors.email ? "border-red-300" : "border-gray-100"}`}
                     />
-                    {fieldErrors.email && <p className="mt-1 text-xs font-semibold text-red-500">{fieldErrors.email}</p>}
+                    {fieldErrors.email && (
+                      <p className="mt-1 text-xs font-semibold text-red-500">
+                        {fieldErrors.email}
+                      </p>
+                    )}
                   </div>
 
                   <div className="relative">
-                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <Phone
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                      size={18}
+                    />
                     <input
                       type="tel"
                       placeholder="Phone Number"
                       value={customerInfo.phone}
                       onChange={(e) => {
-                        setCustomerInfo({ ...customerInfo, phone: e.target.value });
-                        setFieldErrors((current) => ({ ...current, phone: "" }));
+                        setCustomerInfo({
+                          ...customerInfo,
+                          phone: e.target.value,
+                        });
+                        setFieldErrors((current) => ({
+                          ...current,
+                          phone: "",
+                        }));
                       }}
                       className={`w-full pl-12 pr-4 py-3 bg-gray-50 border rounded-xl focus:outline-none focus:border-orange-500 focus:bg-white transition-all text-sm ${fieldErrors.phone ? "border-red-300" : "border-gray-100"}`}
                     />
-                    {fieldErrors.phone && <p className="mt-1 text-xs font-semibold text-red-500">{fieldErrors.phone}</p>}
+                    {fieldErrors.phone && (
+                      <p className="mt-1 text-xs font-semibold text-red-500">
+                        {fieldErrors.phone}
+                      </p>
+                    )}
                   </div>
 
                   <div className="relative">
-                    <MapPin className="absolute left-4 top-3 text-gray-400" size={18} />
+                    <MapPin
+                      className="absolute left-4 top-3 text-gray-400"
+                      size={18}
+                    />
                     <textarea
                       placeholder="Complete Delivery Address"
                       value={customerInfo.address}
                       onChange={(e) => {
-                        setCustomerInfo({ ...customerInfo, address: e.target.value });
-                        setFieldErrors((current) => ({ ...current, address: "" }));
+                        setCustomerInfo({
+                          ...customerInfo,
+                          address: e.target.value,
+                        });
+                        setFieldErrors((current) => ({
+                          ...current,
+                          address: "",
+                        }));
                       }}
                       rows={3}
                       className={`w-full pl-12 pr-4 py-3 bg-gray-50 border rounded-xl focus:outline-none focus:border-orange-500 focus:bg-white transition-all text-sm resize-none ${fieldErrors.address ? "border-red-300" : "border-gray-100"}`}
                     />
-                    {fieldErrors.address && <p className="mt-1 text-xs font-semibold text-red-500">{fieldErrors.address}</p>}
-                    
+                    {fieldErrors.address && (
+                      <p className="mt-1 text-xs font-semibold text-red-500">
+                        {fieldErrors.address}
+                      </p>
+                    )}
+
                     <button
                       type="button"
                       onClick={handleGetLocation}
                       disabled={locationLoading}
                       className="mt-2 w-full flex justify-center items-center gap-2 py-3 rounded-xl font-bold transition-all text-sm border bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                      {locationLoading ? "Fetching Location..." : liveLocation ? `Location Added (${liveLocation.lat.toFixed(4)}, ${liveLocation.lng.toFixed(4)})` : "Share Live Location"}
+                      {locationLoading
+                        ? "Fetching Location..."
+                        : liveLocation
+                          ? `Location Added (${liveLocation.lat.toFixed(4)}, ${liveLocation.lng.toFixed(4)})`
+                          : "Share Live Location"}
                     </button>
                     {(fieldErrors.location || locationError) && (
                       <p className="mt-1 text-xs font-semibold text-red-500">
@@ -520,18 +656,28 @@ const CartPage = () => {
                     {liveLocation && (
                       <div className="mt-3 rounded-xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm">
                         <div className="flex items-center justify-between gap-3 text-gray-800">
-                          <span className="font-semibold">Distance from bakery</span>
+                          <span className="font-semibold">
+                            Distance from bakery
+                          </span>
                           <span className="font-bold">
-                            {deliveryLoading ? "Calculating..." : `${deliveryMeta.distanceKm ?? "--"} km`}
+                            {deliveryLoading
+                              ? "Calculating..."
+                              : `${deliveryMeta.distanceKm ?? "--"} km`}
                           </span>
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-3 text-gray-800">
                           <span className="font-semibold">Delivery fee</span>
                           <span className="font-bold text-orange-700">
-                            {deliveryLoading ? "Calculating..." : deliveryMeta.deliveryCharge === 0 ? "FREE" : `₹${deliveryMeta.deliveryCharge}`}
+                            {deliveryLoading
+                              ? "Calculating..."
+                              : deliveryMeta.deliveryCharge === 0
+                                ? "FREE"
+                                : `₹${deliveryMeta.deliveryCharge}`}
                           </span>
                         </div>
-                        <p className="mt-2 text-xs text-orange-700">{deliveryMeta.pricingLabel}</p>
+                        <p className="mt-2 text-xs text-orange-700">
+                          {deliveryMeta.pricingLabel}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -552,18 +698,26 @@ const CartPage = () => {
                     key={num}
                     onClick={() => {
                       setTableNo(String(num));
-                      setFieldErrors((current) => ({ ...current, tableNo: "" }));
+                      setFieldErrors((current) => ({
+                        ...current,
+                        tableNo: "",
+                      }));
                     }}
-                    className={`py-2 rounded-lg font-bold transition-all ${tableNo === String(num)
-                      ? "bg-orange-600 text-white shadow-md transform scale-105"
-                      : "bg-white text-gray-600 border border-orange-200"
-                      }`}
+                    className={`py-2 rounded-lg font-bold transition-all ${
+                      tableNo === String(num)
+                        ? "bg-orange-600 text-white shadow-md transform scale-105"
+                        : "bg-white text-gray-600 border border-orange-200"
+                    }`}
                   >
                     {num}
                   </button>
                 ))}
               </div>
-              {fieldErrors.tableNo && <p className="mt-2 text-xs font-semibold text-red-500">{fieldErrors.tableNo}</p>}
+              {fieldErrors.tableNo && (
+                <p className="mt-2 text-xs font-semibold text-red-500">
+                  {fieldErrors.tableNo}
+                </p>
+              )}
             </div>
           )}
 
@@ -580,8 +734,22 @@ const CartPage = () => {
               className="w-full rounded-xl border border-dashed border-orange-200 bg-orange-50 px-4 py-3 text-left text-sm font-bold text-orange-700"
             >
               View Offers
-              {discount ? ` • Applied: ${discount.title}` : " • Apply coupon or auto offer"}
+              {discount
+                ? ` • Applied: ${discount.title}`
+                : " • Apply coupon or auto offer"}
             </button>
+
+            {userRole !== "admin" && (
+              <div
+                className={`rounded-xl border px-4 py-3 text-xs ${
+                  storeAvailability.isCurrentlyOpen
+                    ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                }`}
+              >
+                {storeAvailability.checkoutNotice}
+              </div>
+            )}
 
             {discountAmount > 0 && (
               <div className="flex justify-between text-green-700">
@@ -599,7 +767,10 @@ const CartPage = () => {
             )}
 
             {additionalCharges.map((charge, index) => (
-              <div key={`${charge.name}-${index}`} className="flex justify-between text-gray-600">
+              <div
+                key={`${charge.name}-${index}`}
+                className="flex justify-between text-gray-600"
+              >
                 <span>
                   {charge.name}
                   {charge.type === "percentage" ? ` (${charge.value}%)` : ""}
@@ -629,9 +800,11 @@ const CartPage = () => {
               ? "Processing..."
               : deliveryLoading
                 ? "Calculating total..."
-              : userRole === "admin"
-                ? "Fire Order to Kitchen"
-                : "Place Order"}
+                : userRole !== "admin" && !storeAvailability.isCurrentlyOpen
+                  ? "Store Currently Closed"
+                  : userRole === "admin"
+                    ? "Fire Order to Kitchen"
+                    : "Place Order"}
           </button>
         </>
       )}
@@ -645,10 +818,19 @@ const CartPage = () => {
           <div className="bg-white w-full max-w-[520px] rounded-3xl p-5 max-h-[80vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-xl font-black text-gray-900">Available Offers</h2>
-                <p className="text-xs text-gray-500 mt-1">Active offers only. Manual coupon apply kar sakte ho.</p>
+                <h2 className="text-xl font-black text-gray-900">
+                  Available Offers
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Active offers only. Manual coupon apply kar sakte ho.
+                </p>
               </div>
-              <button onClick={() => setShowOffers(false)} className="w-9 h-9 rounded-full bg-gray-100 font-bold text-gray-500">x</button>
+              <button
+                onClick={() => setShowOffers(false)}
+                className="w-9 h-9 rounded-full bg-gray-100 font-bold text-gray-500"
+              >
+                x
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -658,26 +840,43 @@ const CartPage = () => {
                 </div>
               ) : (
                 offers.map((offer) => {
-                  const canApply = subtotal >= Number(offer.minOrderAmount || 0);
+                  const canApply =
+                    subtotal >= Number(offer.minOrderAmount || 0);
                   const isManual = offer.applyType === "manual";
                   const isApplied =
                     (isManual && appliedOfferCode === offer.code) ||
-                    (!isManual && discount?.applyType === "automatic" && discount?.title === offer.title);
+                    (!isManual &&
+                      discount?.applyType === "automatic" &&
+                      discount?.title === offer.title);
 
                   return (
-                    <div key={offer._id} className="rounded-2xl border border-gray-100 p-4">
+                    <div
+                      key={offer._id}
+                      className="rounded-2xl border border-gray-100 p-4"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="font-black text-gray-900">{offer.title}</h3>
+                          <h3 className="font-black text-gray-900">
+                            {offer.title}
+                          </h3>
                           <p className="text-sm text-gray-500 mt-1">
-                            {offer.discountType === "percentage" ? `${offer.discountValue}% off` : `₹${offer.discountValue} off`} on orders above ₹{offer.minOrderAmount}
+                            {offer.discountType === "percentage"
+                              ? `${offer.discountValue}% off`
+                              : `₹${offer.discountValue} off`}{" "}
+                            on orders above ₹{offer.minOrderAmount}
                           </p>
                           <p className="text-xs font-bold text-orange-600 mt-1">
-                            {isManual ? `Coupon: ${offer.code}` : "Automatic offer"}
+                            {isManual
+                              ? `Coupon: ${offer.code}`
+                              : "Automatic offer"}
                           </p>
                         </div>
-                        <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded ${canApply ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                          {canApply ? "Eligible" : `Add ₹${Number(offer.minOrderAmount || 0) - subtotal}`}
+                        <span
+                          className={`text-[10px] font-bold uppercase px-2 py-1 rounded ${canApply ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}
+                        >
+                          {canApply
+                            ? "Eligible"
+                            : `Add ₹${Number(offer.minOrderAmount || 0) - subtotal}`}
                         </span>
                       </div>
                       <div className="mt-3 flex gap-2">
@@ -695,7 +894,9 @@ const CartPage = () => {
                           </button>
                         ) : (
                           <div className="flex-1 rounded-xl bg-green-50 text-green-700 py-2 text-center text-sm font-bold">
-                            {isApplied ? "Auto Applied" : "Auto applies when eligible"}
+                            {isApplied
+                              ? "Auto Applied"
+                              : "Auto applies when eligible"}
                           </div>
                         )}
                       </div>

@@ -12,9 +12,17 @@ const {
 
 // Import Controllers
 // Import Controllers
-const { signup, signin, verifyOtp, forgotPassword, resetPassword } = require("../controllers/authController");
-const { createRazorpayOrder, verifyPayment } = require("../controllers/paymentController");
-
+const {
+  signup,
+  signin,
+  verifyOtp,
+  forgotPassword,
+  resetPassword,
+} = require("../controllers/authController");
+const {
+  createRazorpayOrder,
+  verifyPayment,
+} = require("../controllers/paymentController");
 
 // Import Models
 const Order = require("../models/Order");
@@ -27,6 +35,11 @@ const {
   getDeliveryPricingSettings,
   buildOrderPricing,
 } = require("../utils/deliveryPricing");
+const {
+  buildStoreAvailability,
+  getStoreTimingSettings,
+  assertStoreIsOpenForOnlineOrders,
+} = require("../utils/storeAvailability");
 
 // 🟢 Apply Validation Middleware
 userRouter.post("/signup", validateSignup, signup);
@@ -68,7 +81,11 @@ userRouter.post("/pricing-summary", optionalAuth, async (req, res) => {
     }
 
     const pricing = await buildOrderPricing(orderData, Boolean(isDineIn));
-    res.json(pricing);
+    const storeTiming = await getStoreTimingSettings();
+    res.json({
+      ...pricing,
+      storeAvailability: buildStoreAvailability(storeTiming),
+    });
   } catch (error) {
     res.status(500).json({ error: "Failed to calculate pricing" });
   }
@@ -76,7 +93,10 @@ userRouter.post("/pricing-summary", optionalAuth, async (req, res) => {
 
 userRouter.get("/blogs", async (req, res) => {
   try {
-    const blogs = await Blog.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 });
+    const blogs = await Blog.find({ isActive: true }).sort({
+      sortOrder: 1,
+      createdAt: -1,
+    });
     res.json({ blogs });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch blogs" });
@@ -85,7 +105,10 @@ userRouter.get("/blogs", async (req, res) => {
 
 userRouter.get("/offers", async (req, res) => {
   try {
-    const offers = await Offer.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 });
+    const offers = await Offer.find({ isActive: true }).sort({
+      sortOrder: 1,
+      createdAt: -1,
+    });
     res.json({ offers });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch offers" });
@@ -96,42 +119,64 @@ userRouter.post("/create-razorpay-order", optionalAuth, createRazorpayOrder);
 userRouter.post("/verify-payment", optionalAuth, verifyPayment);
 
 // Place Order Route - OPTIONAL AUTH & VALIDATED
-userRouter.post("/place-order", optionalAuth, validatePlaceOrder, async (req, res) => {
-  try {
-    const isDineIn = Boolean(req.body.tableNo);
-    const pricing = await buildOrderPricing(req.body, isDineIn);
+userRouter.post(
+  "/place-order",
+  optionalAuth,
+  validatePlaceOrder,
+  async (req, res) => {
+    try {
+      const isDineIn = Boolean(req.body.tableNo);
 
-    if (!isDineIn && !req.body.location) {
-      return res.status(400).json({ error: "Live location is required for delivery orders" });
+      if (!isDineIn) {
+        await assertStoreIsOpenForOnlineOrders();
+      }
+
+      const pricing = await buildOrderPricing(req.body, isDineIn);
+
+      if (!isDineIn && !req.body.location) {
+        return res
+          .status(400)
+          .json({ error: "Live location is required for delivery orders" });
+      }
+
+      const orderData = {
+        items: req.body.items,
+        itemsSubtotal: pricing.itemsSubtotal,
+        totalAmount: pricing.totalAmount,
+        deliveryCharge: pricing.deliveryCharge,
+        discount: pricing.discount,
+        additionalCharges: pricing.additionalCharges,
+        distanceKm: pricing.distanceKm || 0,
+        address: req.body.address,
+        tableNo: req.body.tableNo || "",
+        customerDetails: req.body.customerDetails,
+        location: req.body.location,
+      };
+
+      // If logged in, attach userId
+      if (req.user) {
+        orderData.userId = req.user.id;
+      }
+
+      const newOrder = new Order(orderData);
+      await newOrder.save();
+      res.json({
+        message: "Order placed successfully!",
+        orderId: newOrder._id,
+      });
+    } catch (error) {
+      console.log("❌ Order Error:", error.message);
+      if (error.code === "STORE_CLOSED") {
+        return res.status(error.statusCode || 403).json({
+          error: error.message,
+          code: error.code,
+          storeAvailability: error.storeAvailability,
+        });
+      }
+      res.status(500).json({ error: "Could not place order" });
     }
-
-    const orderData = {
-      items: req.body.items,
-      itemsSubtotal: pricing.itemsSubtotal,
-      totalAmount: pricing.totalAmount,
-      deliveryCharge: pricing.deliveryCharge,
-      discount: pricing.discount,
-      additionalCharges: pricing.additionalCharges,
-      distanceKm: pricing.distanceKm || 0,
-      address: req.body.address,
-      tableNo: req.body.tableNo || "",
-      customerDetails: req.body.customerDetails,
-      location: req.body.location,
-    };
-
-    // If logged in, attach userId
-    if (req.user) {
-      orderData.userId = req.user.id;
-    }
-
-    const newOrder = new Order(orderData);
-    await newOrder.save();
-    res.json({ message: "Order placed successfully!", orderId: newOrder._id });
-  } catch (error) {
-    console.log("❌ Order Error:", error.message);
-    res.status(500).json({ error: "Could not place order" });
-  }
-});
+  },
+);
 
 // Menu Route
 userRouter.get("/menu", async (req, res) => {
@@ -171,9 +216,20 @@ userRouter.get("/todays-special", async (req, res) => {
   try {
     let settings = await Settings.findOne();
     if (!settings) settings = await Settings.create({});
-    res.json({ todaysSpecial: settings.todaysSpecial || "25% OFF on Large Pizzas 🍕" });
+    res.json({
+      todaysSpecial: settings.todaysSpecial || "25% OFF on Large Pizzas 🍕",
+    });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch Today's Special" });
+  }
+});
+
+userRouter.get("/store-availability", async (_req, res) => {
+  try {
+    const storeTiming = await getStoreTimingSettings();
+    res.json(buildStoreAvailability(storeTiming));
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch store availability" });
   }
 });
 

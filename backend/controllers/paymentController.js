@@ -2,6 +2,9 @@ const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const Order = require("../models/Order");
 const { buildOrderPricing } = require("../utils/deliveryPricing");
+const {
+  assertStoreIsOpenForOnlineOrders,
+} = require("../utils/storeAvailability");
 
 const getRazorpayKeys = () => ({
   keyId: (process.env.RAZORPAY_KEY_ID || "").trim(),
@@ -31,14 +34,23 @@ exports.createRazorpayOrder = async (req, res) => {
 
     const razorpay = getRazorpayInstance();
     if (!razorpay) {
-      return res.status(500).json({ error: "Razorpay keys are not configured on server" });
+      return res
+        .status(500)
+        .json({ error: "Razorpay keys are not configured on server" });
     }
 
     const isDineIn = Boolean(orderData.tableNo);
+
+    if (!isDineIn) {
+      await assertStoreIsOpenForOnlineOrders();
+    }
+
     const pricing = await buildOrderPricing(orderData, isDineIn);
 
     if (!isDineIn && !orderData.location) {
-      return res.status(400).json({ error: "Live location is required for delivery orders" });
+      return res
+        .status(400)
+        .json({ error: "Live location is required for delivery orders" });
     }
 
     const options = {
@@ -54,6 +66,13 @@ exports.createRazorpayOrder = async (req, res) => {
       keyId: getRazorpayKeys().keyId,
     });
   } catch (error) {
+    if (error.code === "STORE_CLOSED") {
+      return res.status(error.statusCode || 403).json({
+        error: error.message,
+        code: error.code,
+        storeAvailability: error.storeAvailability,
+      });
+    }
     console.error("Razorpay Order Error:", error);
     const statusCode = error.statusCode || 500;
     const razorpayMessage = error.error?.description || error.message;
@@ -79,7 +98,9 @@ exports.verifyPayment = async (req, res) => {
     const { keySecret } = getRazorpayKeys();
 
     if (!keySecret) {
-      return res.status(500).json({ error: "Razorpay keys are not configured on server" });
+      return res
+        .status(500)
+        .json({ error: "Razorpay keys are not configured on server" });
     }
 
     // Verify Signature
@@ -97,7 +118,9 @@ exports.verifyPayment = async (req, res) => {
     const pricing = await buildOrderPricing(orderData, isDineIn);
 
     if (!isDineIn && !orderData?.location) {
-      return res.status(400).json({ error: "Live location is required for delivery orders" });
+      return res
+        .status(400)
+        .json({ error: "Live location is required for delivery orders" });
     }
 
     // Payment is verified, save order to DB
@@ -127,6 +150,8 @@ exports.verifyPayment = async (req, res) => {
     });
   } catch (error) {
     console.error("Payment Verification Error:", error);
-    res.status(500).json({ error: "Internal Server Error during verification" });
+    res
+      .status(500)
+      .json({ error: "Internal Server Error during verification" });
   }
 };
